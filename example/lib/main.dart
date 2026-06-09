@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phone_number_field/phone_number_field.dart';
+import 'package:country_phone_field/country_phone_field.dart';
 
 void main() => runApp(const ExampleApp());
 
@@ -21,7 +21,7 @@ class _ExampleAppState extends State<ExampleApp> {
   Widget build(BuildContext context) {
     final seed = const Color(0xFF6C5CE7);
     return MaterialApp(
-      title: 'phone_number_field demo',
+      title: 'country_phone_field demo',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
@@ -65,7 +65,7 @@ class _GalleryPageState extends State<GalleryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('phone_number_field'),
+        title: const Text('country_phone_field'),
         actions: [
           IconButton(
             tooltip: 'Toggle theme',
