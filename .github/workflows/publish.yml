@@ -13,7 +13,7 @@ name: Publish to pub.dev (manual tag)
 #   1. Push this package to pub.dev manually the first time (or have it created).
 #   2. On pub.dev → your package → Admin → "Automated publishing", enable
 #      publishing from GitHub Actions and set the repository to
-#      `<owner>/phone_number_field` and the tag pattern to `v{{version}}`.
+#      `<owner>/country_phone_field` and the tag pattern to `v{{version}}`.
 # See https://dart.dev/tools/pub/automated-publishing for details.
 on:
   push:

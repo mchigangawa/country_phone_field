@@ -1,5 +1,5 @@
-name: phone_number_field_example
-description: "Demonstrates the phone_number_field package."
+name: country_phone_field_example
+description: "Demonstrates the country_phone_field package."
 publish_to: "none"
 version: 1.0.0
 
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  phone_number_field:
+  country_phone_field:
     path: ../
 
 dev_dependencies:

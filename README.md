@@ -1,4 +1,4 @@
-# phone_number_field
+# country_phone_field
 
 A **highly customizable** international phone number input field for Flutter.
 
@@ -20,11 +20,11 @@ separated from the rest of the number**.
 
 ```yaml
 dependencies:
-  phone_number_field: ^0.1.0
+  country_phone_field: ^0.1.0
 ```
 
 ```dart
-import 'package:phone_number_field/phone_number_field.dart';
+import 'package:country_phone_field/country_phone_field.dart';
 ```
 
 ## Quick start

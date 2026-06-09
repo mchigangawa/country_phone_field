@@ -1,9 +1,9 @@
-name: phone_number_field
+name: country_phone_field
 description: "A highly customizable international phone number input field: searchable country picker, per-country validation, flexible styling, and E.164 output."
 version: 0.1.0
-homepage: https://github.com/mchigangawa/phone_number_field
-repository: https://github.com/mchigangawa/phone_number_field
-issue_tracker: https://github.com/mchigangawa/phone_number_field/issues
+homepage: https://github.com/mchigangawa/country_phone_field
+repository: https://github.com/mchigangawa/country_phone_field
+issue_tracker: https://github.com/mchigangawa/country_phone_field/issues
 
 environment:
   sdk: ^3.12.1

@@ -6,7 +6,7 @@
 /// localisation configuration objects.
 ///
 /// ```dart
-/// import 'package:phone_number_field/phone_number_field.dart';
+/// import 'package:country_phone_field/country_phone_field.dart';
 ///
 /// PhoneNumberField(
 ///   initialCountry: Countries.zimbabwe,
