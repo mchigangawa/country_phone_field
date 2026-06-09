@@ -56,6 +56,27 @@ jobs:
             exit 1
           fi
 
+      # Idempotency guard: skip publishing if this exact version is already on
+      # pub.dev, so re-pushing a tag (or tagging an already-published version)
+      # is a safe no-op instead of a failed "version already exists" run.
+      - name: Check whether version is already on pub.dev
+        id: published
+        run: |
+          NAME="$(grep '^name:' pubspec.yaml | awk '{print $2}')"
+          VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          CODE="$(curl -s --retry 3 --retry-delay 2 -o /dev/null -w '%{http_code}' \
+            "https://pub.dev/api/packages/$NAME/versions/$VERSION")"
+          if [ "$CODE" = "200" ]; then
+            echo "::notice::$NAME $VERSION is already on pub.dev — skipping publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          elif [ "$CODE" = "404" ]; then
+            echo "$NAME $VERSION not yet published — will publish."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected pub.dev response ($CODE) for $NAME $VERSION."
+            exit 1
+          fi
+
       - name: Format check
         run: dart format --output=none --set-exit-if-changed .
 
@@ -66,7 +87,9 @@ jobs:
         run: flutter test
 
       - name: Publish (dry run)
+        if: steps.published.outputs.should_publish == 'true'
         run: flutter pub publish --dry-run
 
       - name: Publish
+        if: steps.published.outputs.should_publish == 'true'
         run: flutter pub publish --force
