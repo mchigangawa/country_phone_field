@@ -1,104 +1,81 @@
-name: Release (main → pub.dev)
+# Manual release trigger. Run it from the Actions tab (or `gh workflow run
+# Release -f version=0.1.1`) after bumping `version:` in pubspec.yaml and adding
+# a matching `## <version>` section to CHANGELOG.md. It validates everything,
+# creates+pushes the `v<version>` tag (via RELEASE_PAT so the tag push triggers
+# publish.yml), and opens a GitHub Release.
+#
+# Requires a repo/org secret `RELEASE_PAT`: a fine-grained or classic PAT with
+# `contents: write` (and `workflow`) so the pushed tag can trigger publish.yml.
+name: Release
 
-# Auto-release on every push/merge to `main`.
-#
-# Flow:
-#   1. Read `version:` from pubspec.yaml.
-#   2. If a git tag `v<version>` already exists -> nothing to do (skip).
-#   3. Otherwise run the quality gates, publish to pub.dev (OIDC, no secrets),
-#      then create + push the `v<version>` tag as the record of the release.
-#
-# Stable vs pre-release is decided by the version string itself:
-#   version: 0.2.0          -> stable   (becomes "latest" on pub.dev)
-#   version: 0.2.0-beta.1   -> pre-release (hidden from default, opt-in only)
-#
-# So to cut a release you only edit pubspec.yaml + CHANGELOG.md and merge to
-# main — no manual `git tag` needed. (Pre-releases work the same way: just give
-# the version a `-beta`/`-rc`/`-dev` suffix.)
-#
-# Note: the tag is pushed with GITHUB_TOKEN, which intentionally does NOT
-# re-trigger publish.yml, so there is no double publish.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without v prefix (example: 0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   release:
-    name: Release
     runs-on: ubuntu-latest
-    # Fail fast instead of hanging for hours if `pub publish` ever blocks on an
-    # interactive auth prompt (e.g. OIDC not yet configured on pub.dev).
-    timeout-minutes: 15
-    permissions:
-      contents: write # create + push the version tag
-      id-token: write # pub.dev OIDC authentication
-    environment: pub.dev
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - name: Checkout (full history + tags)
+      - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
 
-      # Decide whether to release by asking pub.dev directly (the source of
-      # truth), so the job is idempotent: re-running for an already-published
-      # version is a clean no-op, not a failed "version already exists" run.
-      # The git tag is treated as a secondary signal / record.
-      - name: Determine version & whether to release
-        id: check
+      - name: Validate version format
         run: |
-          NAME="$(grep '^name:' pubspec.yaml | awk '{print $2}')"
-          VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          CODE="$(curl -s --retry 3 --retry-delay 2 -o /dev/null -w '%{http_code}' \
-            "https://pub.dev/api/packages/$NAME/versions/$VERSION")"
-          if [ "$CODE" = "200" ]; then
-            echo "::notice::$NAME $VERSION is already on pub.dev — skipping release."
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-          elif [ "$CODE" = "404" ]; then
-            echo "::notice::$NAME $VERSION not yet published — will release."
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::Unexpected pub.dev response ($CODE) for $NAME $VERSION."
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "Invalid semver version: $VERSION"
             exit 1
           fi
 
-      - name: Set up Flutter
-        if: steps.check.outputs.should_release == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
+      - name: Verify pubspec version matches input
+        run: |
+          VERSION="${{ inputs.version }}"
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
+            echo "pubspec.yaml version ($PUBSPEC_VERSION) does not match workflow input ($VERSION)"
+            exit 1
+          fi
 
-      - name: Install dependencies
-        if: steps.check.outputs.should_release == 'true'
-        run: flutter pub get
+      - name: Verify changelog contains version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! grep -q "^## $VERSION" CHANGELOG.md; then
+            echo "CHANGELOG.md does not contain header: ## $VERSION"
+            exit 1
+          fi
 
-      - name: Format check
-        if: steps.check.outputs.should_release == 'true'
-        run: dart format --output=none --set-exit-if-changed .
+      - name: Check tag does not already exist
+        run: |
+          VERSION="v${{ inputs.version }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag already exists: $VERSION"
+            exit 1
+          fi
 
-      - name: Analyze
-        if: steps.check.outputs.should_release == 'true'
-        run: flutter analyze
-
-      - name: Run tests
-        if: steps.check.outputs.should_release == 'true'
-        run: flutter test
-
-      - name: Publish (dry run)
-        if: steps.check.outputs.should_release == 'true'
-        run: flutter pub publish --dry-run
-
-      - name: Publish to pub.dev
-        if: steps.check.outputs.should_release == 'true'
-        run: flutter pub publish --force
-
-      - name: Tag the release
-        if: steps.check.outputs.should_release == 'true'
-        env:
-          VERSION: ${{ steps.check.outputs.version }}
+      - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
+            --generate-notes
