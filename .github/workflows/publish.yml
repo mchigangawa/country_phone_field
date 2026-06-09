@@ -1,0 +1,70 @@
+name: Publish to pub.dev (manual tag)
+
+# MANUAL / FALLBACK publisher: runs when a human pushes a version tag directly
+# (e.g. `git tag v0.1.0 && git push origin v0.1.0`). The normal path is
+# release.yml, which auto-tags + publishes on every merge to `main`; you only
+# need this workflow to release from a specific commit out-of-band.
+#
+# (Tags created by release.yml are pushed with GITHUB_TOKEN and do NOT trigger
+# this workflow, so the two never double-publish.)
+#
+# Authentication uses pub.dev's automated publishing (OIDC) — there are no
+# secrets/tokens to manage. Before the first run you must enable it once:
+#   1. Push this package to pub.dev manually the first time (or have it created).
+#   2. On pub.dev → your package → Admin → "Automated publishing", enable
+#      publishing from GitHub Actions and set the repository to
+#      `<owner>/phone_number_field` and the tag pattern to `v{{version}}`.
+# See https://dart.dev/tools/pub/automated-publishing for details.
+on:
+  push:
+    tags:
+      # Matches v1.2.3 and pre-releases like v1.2.3-beta.1
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    # `id-token: write` is required for pub.dev OIDC authentication.
+    permissions:
+      id-token: write
+    # The `pub.dev` environment can hold optional approval/protection rules.
+    environment: pub.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify tag matches pubspec version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PUBSPEC="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          echo "Tag version:     $TAG"
+          echo "Pubspec version: $PUBSPEC"
+          if [ "$TAG" != "$PUBSPEC" ]; then
+            echo "::error::Tag ($TAG) does not match pubspec version ($PUBSPEC)."
+            exit 1
+          fi
+
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Publish (dry run)
+        run: flutter pub publish --dry-run
+
+      - name: Publish
+        run: flutter pub publish --force

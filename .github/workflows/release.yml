@@ -1,0 +1,91 @@
+name: Release (main → pub.dev)
+
+# Auto-release on every push/merge to `main`.
+#
+# Flow:
+#   1. Read `version:` from pubspec.yaml.
+#   2. If a git tag `v<version>` already exists -> nothing to do (skip).
+#   3. Otherwise run the quality gates, publish to pub.dev (OIDC, no secrets),
+#      then create + push the `v<version>` tag as the record of the release.
+#
+# Stable vs pre-release is decided by the version string itself:
+#   version: 0.2.0          -> stable   (becomes "latest" on pub.dev)
+#   version: 0.2.0-beta.1   -> pre-release (hidden from default, opt-in only)
+#
+# So to cut a release you only edit pubspec.yaml + CHANGELOG.md and merge to
+# main — no manual `git tag` needed. (Pre-releases work the same way: just give
+# the version a `-beta`/`-rc`/`-dev` suffix.)
+#
+# Note: the tag is pushed with GITHUB_TOKEN, which intentionally does NOT
+# re-trigger publish.yml, so there is no double publish.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create + push the version tag
+      id-token: write # pub.dev OIDC authentication
+    environment: pub.dev
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine version & whether to release
+        id: check
+        run: |
+          VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION already tagged — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version v$VERSION — will release."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Flutter
+        if: steps.check.outputs.should_release == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        if: steps.check.outputs.should_release == 'true'
+        run: flutter pub get
+
+      - name: Format check
+        if: steps.check.outputs.should_release == 'true'
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        if: steps.check.outputs.should_release == 'true'
+        run: flutter analyze
+
+      - name: Run tests
+        if: steps.check.outputs.should_release == 'true'
+        run: flutter test
+
+      - name: Publish (dry run)
+        if: steps.check.outputs.should_release == 'true'
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        if: steps.check.outputs.should_release == 'true'
+        run: flutter pub publish --force
+
+      - name: Tag the release
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"

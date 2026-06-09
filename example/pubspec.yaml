@@ -1,0 +1,22 @@
+name: phone_number_field_example
+description: "Demonstrates the phone_number_field package."
+publish_to: "none"
+version: 1.0.0
+
+environment:
+  sdk: ^3.12.1
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  phone_number_field:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
