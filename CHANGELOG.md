@@ -1,3 +1,8 @@
+## 0.1.1
+
+* Maintenance release validating the automated publishing pipeline. No
+  functional or API changes to the widget.
+
 ## 0.1.0
 
 Initial release.
