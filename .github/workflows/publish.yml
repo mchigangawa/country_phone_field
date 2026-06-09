@@ -25,6 +25,8 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    # Fail fast instead of hanging if `pub publish` ever blocks on auth.
+    timeout-minutes: 15
     # `id-token: write` is required for pub.dev OIDC authentication.
     permissions:
       id-token: write

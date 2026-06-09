@@ -26,6 +26,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Fail fast instead of hanging for hours if `pub publish` ever blocks on an
+    # interactive auth prompt (e.g. OIDC not yet configured on pub.dev).
+    timeout-minutes: 15
     permissions:
       contents: write # create + push the version tag
       id-token: write # pub.dev OIDC authentication
