@@ -39,17 +39,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Decide whether to release by asking pub.dev directly (the source of
+      # truth), so the job is idempotent: re-running for an already-published
+      # version is a clean no-op, not a failed "version already exists" run.
+      # The git tag is treated as a secondary signal / record.
       - name: Determine version & whether to release
         id: check
         run: |
+          NAME="$(grep '^name:' pubspec.yaml | awk '{print $2}')"
           VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "v$VERSION already tagged — skipping release."
+          CODE="$(curl -s --retry 3 --retry-delay 2 -o /dev/null -w '%{http_code}' \
+            "https://pub.dev/api/packages/$NAME/versions/$VERSION")"
+          if [ "$CODE" = "200" ]; then
+            echo "::notice::$NAME $VERSION is already on pub.dev — skipping release."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New version v$VERSION — will release."
+          elif [ "$CODE" = "404" ]; then
+            echo "::notice::$NAME $VERSION not yet published — will release."
             echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected pub.dev response ($CODE) for $NAME $VERSION."
+            exit 1
           fi
 
       - name: Set up Flutter
