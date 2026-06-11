@@ -32,7 +32,7 @@ separated from the rest of the number**.
 
 ```yaml
 dependencies:
-  country_phone_field: ^0.2.0
+  country_phone_field: ^0.2.0-beta.1
 ```
 
 ```dart
@@ -373,6 +373,11 @@ cd example && flutter run
 `PhoneNumberField`, `PhoneNumber`, `Country`, `Countries`,
 `CountrySelectorStyle`, `CountryPickerConfig`, `CountryPickerType`,
 `PhoneFieldLabels`, `PhoneFieldBorderType`, `showCountryPicker`.
+
+## Releasing
+
+Maintainers: see [RELEASING.md](RELEASING.md) for how to ship stable and beta
+versions through the automated GitHub Actions → pub.dev pipeline.
 
 ## License
 
