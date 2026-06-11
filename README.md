@@ -32,7 +32,7 @@ separated from the rest of the number**.
 
 ```yaml
 dependencies:
-  country_phone_field: ^0.2.0
+  country_phone_field: ^0.2.0-beta.1
 ```
 
 ```dart

@@ -1,7 +1,8 @@
-## 0.2.0
+## 0.2.0-beta.1
 
 Smarter parsing and input handling for real-world numbers, plus documentation
-screenshots. No breaking API changes.
+screenshots. No breaking API changes. Beta — please report any issues before
+the stable `0.2.0`.
 
 ### Added
 * **Auto-detect country on paste/type** — pasting a full international number
