@@ -84,6 +84,8 @@ class PhoneNumberField extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.limitToMaxLength = true,
     this.clearOnCountryChange = false,
+    this.autoDetectCountry = true,
+    this.stripNationalPrefix = true,
     this.inputFormatters,
     this.enabled = true,
     this.readOnly = false,
@@ -101,7 +103,12 @@ class PhoneNumberField extends StatefulWidget {
   /// code), so its `.text` is the national number.
   final TextEditingController? controller;
 
-  /// Initial national number (digits) when no [controller] is supplied.
+  /// Initial number when no [controller] is supplied.
+  ///
+  /// Usually the national number (digits only). If it starts with `+` (or `00`)
+  /// and [autoDetectCountry] is on, it is parsed as a full international number:
+  /// the country is detected from the dial code and only the national digits
+  /// are placed in the field. So both `'771234567'` and `'+263771234567'` work.
   final String? initialValue;
 
   /// Country selected on first build. Takes precedence over
@@ -207,7 +214,23 @@ class PhoneNumberField extends StatefulWidget {
   /// default) the number is kept but truncated to the new country's max length.
   final bool clearOnCountryChange;
 
-  /// Extra input formatters applied after the built-in digit/length filters.
+  /// Whether typing or pasting an international number auto-switches the country
+  /// and strips the dial code.
+  ///
+  /// When `true` (the default), pasting `+263771234567` (or `00263771234567`)
+  /// selects Zimbabwe and leaves `771234567` in the field. A bare paste without
+  /// a `+` is only re-attributed when the remaining digits are a valid national
+  /// length for some country, so an ordinary local number is left alone. Only
+  /// countries in the field's list are considered.
+  final bool autoDetectCountry;
+
+  /// Whether to drop a leading national trunk `0` (e.g. `0771234567` →
+  /// `771234567`). Applies to typed, pasted and [initialValue] numbers. Set to
+  /// `false` for the rare locales where the national number keeps its `0`.
+  final bool stripNationalPrefix;
+
+  /// Extra input formatters applied after the built-in digit/length/detect
+  /// filters.
   final List<TextInputFormatter>? inputFormatters;
 
   /// Whether the field is interactive.
@@ -250,11 +273,36 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   @override
   void initState() {
     super.initState();
-    _controller =
-        widget.controller ?? TextEditingController(text: widget.initialValue);
-    _ownsController = widget.controller == null;
     _country = _resolveInitialCountry();
+
+    var initialText = widget.initialValue ?? '';
+    // Hydrate from a full international string (e.g. a stored E.164 number).
+    if (widget.controller == null &&
+        widget.autoDetectCountry &&
+        widget.lockedCountry == null &&
+        _looksInternational(initialText)) {
+      final parsed = Countries.parsePhone(
+        initialText,
+        fallback: _country,
+        within: _countries,
+        stripTrunkPrefix: widget.stripNationalPrefix,
+      );
+      _country = parsed.country;
+      initialText = parsed.nationalNumber;
+    } else if (widget.controller == null &&
+        widget.stripNationalPrefix &&
+        initialText.startsWith('0')) {
+      initialText = initialText.replaceFirst(RegExp(r'^0+'), '');
+    }
+
+    _controller = widget.controller ?? TextEditingController(text: initialText);
+    _ownsController = widget.controller == null;
     _controller.addListener(_handleTextChanged);
+  }
+
+  static bool _looksInternational(String value) {
+    final t = value.trimLeft();
+    return t.startsWith('+') || t.startsWith('00');
   }
 
   Country _resolveInitialCountry() {
@@ -321,6 +369,20 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       widget.onCountryChanged?.call(country);
       widget.onChanged?.call(_value);
     }
+  }
+
+  /// Switches the country in response to an international number detected by the
+  /// input formatter. Deferred to a post-frame callback because formatters run
+  /// during the in-flight text update, where calling [setState] is unsafe.
+  void _handleDetectedCountry(Country country) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || country == _country || widget.lockedCountry != null) {
+        return;
+      }
+      setState(() => _country = country);
+      widget.onCountryChanged?.call(country);
+      widget.onChanged?.call(_value);
+    });
   }
 
   Future<void> _openPicker() async {
@@ -489,9 +551,14 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   @override
   Widget build(BuildContext context) {
     final formatters = <TextInputFormatter>[
-      FilteringTextInputFormatter.digitsOnly,
-      if (widget.limitToMaxLength)
-        LengthLimitingTextInputFormatter(_country.maxLength),
+      _PhoneInputFormatter(
+        country: _country,
+        countries: _countries,
+        autoDetect: widget.autoDetectCountry && _pickerEnabled,
+        stripNationalPrefix: widget.stripNationalPrefix,
+        limitLength: widget.limitToMaxLength,
+        onCountryDetected: _handleDetectedCountry,
+      ),
       ...?widget.inputFormatters,
     ];
 
@@ -512,6 +579,81 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       onFieldSubmitted: (_) => widget.onSubmitted?.call(_value),
       onSaved: (_) => widget.onSaved?.call(_value),
       decoration: _buildDecoration(context, _buildSelector(context)),
+    );
+  }
+}
+
+/// Sanitizes input to national digits and, when [autoDetect] is on, recognises
+/// a pasted/typed international number (a leading `+` or `00`, or a bare paste
+/// whose remainder is a valid national length), switching the country and
+/// stripping the dial code. A national trunk `0` is dropped when
+/// [stripNationalPrefix] is set, and the result is capped at the active
+/// country's [Country.maxLength] when [limitLength] is set.
+class _PhoneInputFormatter extends TextInputFormatter {
+  _PhoneInputFormatter({
+    required this.country,
+    required this.countries,
+    required this.autoDetect,
+    required this.stripNationalPrefix,
+    required this.limitLength,
+    required this.onCountryDetected,
+  });
+
+  final Country country;
+  final List<Country> countries;
+  final bool autoDetect;
+  final bool stripNationalPrefix;
+  final bool limitLength;
+  final ValueChanged<Country> onCountryDetected;
+
+  static final RegExp _nonDigits = RegExp(r'[^0-9]');
+  static final RegExp _leadingZeros = RegExp(r'^0+');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(_nonDigits, '');
+    if (digits.isEmpty) return const TextEditingValue();
+
+    var hasIntlPrefix = newValue.text.trimLeft().startsWith('+');
+    // `00` is the international call prefix — treat it like a leading `+`.
+    if (autoDetect && !hasIntlPrefix && digits.startsWith('00')) {
+      hasIntlPrefix = true;
+      digits = digits.substring(2);
+    }
+
+    // A multi-character jump signals a paste rather than a keystroke.
+    final isPaste = newValue.text.length - oldValue.text.length > 1;
+
+    var active = country;
+    if (autoDetect && (hasIntlPrefix || isPaste)) {
+      final match = Countries.parse(
+        hasIntlPrefix ? '+$digits' : digits,
+        stripTrunkPrefix: stripNationalPrefix,
+        within: countries,
+      );
+      if (match != null) {
+        active = match.country;
+        digits = match.nationalNumber;
+        if (active != country) onCountryDetected(active);
+      }
+    }
+
+    // Drop a national trunk 0 when no dial code consumed it (the parse above
+    // already trims it on the matched branch).
+    if (stripNationalPrefix && active == country && digits.startsWith('0')) {
+      digits = digits.replaceFirst(_leadingZeros, '');
+    }
+
+    if (limitLength && digits.length > active.maxLength) {
+      digits = digits.substring(0, active.maxLength);
+    }
+
+    return TextEditingValue(
+      text: digits,
+      selection: TextSelection.collapsed(offset: digits.length),
     );
   }
 }
