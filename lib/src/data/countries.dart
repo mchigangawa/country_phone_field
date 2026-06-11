@@ -37,13 +37,19 @@ abstract final class Countries {
   ///
   /// Dial codes are not uniquely decodable (e.g. `+1` is shared by the US,
   /// Canada and many Caribbean nations), so when several countries share a
-  /// code the first match in alphabetical order wins. Pass [preferred] to bias
+  /// code the first match in catalogue order wins. Pass [preferred] to bias
   /// the result toward a specific country (typically the currently selected
-  /// one) when it is among the candidates.
-  static Country? fromDialCode(String input, {Country? preferred}) {
+  /// one) when it is among the candidates. Pass [within] to restrict the search
+  /// to a subset of countries (e.g. the field's allowed list).
+  static Country? fromDialCode(
+    String input, {
+    Country? preferred,
+    Iterable<Country>? within,
+  }) {
     final normalized = input.startsWith('+') ? input : '+$input';
+    final pool = within ?? _all;
     Country? best;
-    for (final c in _all) {
+    for (final c in pool) {
       if (normalized.startsWith(c.dialCode)) {
         if (best == null || c.dialCode.length > best.dialCode.length) {
           best = c;
@@ -63,26 +69,136 @@ abstract final class Countries {
   }
 
   /// Splits a raw international number into its [Country] and the national
-  /// number (digits only).
-  ///
-  /// Returns `null` when no dial code can be matched. Useful for hydrating the
-  /// field from a stored E.164 string:
+  /// number (digits only), returning `null` when no country can be confidently
+  /// determined. Useful for hydrating a field from a stored E.164 string:
   ///
   /// ```dart
   /// final parsed = Countries.parse('+263771234567');
   /// // parsed.country == Countries.zimbabwe, parsed.nationalNumber == '771234567'
   /// ```
-  static ({Country country, String nationalNumber})? parse(String raw) {
+  ///
+  /// ### Edge cases
+  /// * A leading `+` removes ambiguity — any matching dial code is accepted and
+  ///   the longest one wins (`+12421234567` → Bahamas, not the US).
+  /// * **Without** a `+`, a bare national number must not be mistaken for
+  ///   "dial code + number". So `263771234567` resolves to Zimbabwe (the 9
+  ///   remaining digits are a valid ZW length), but `771234567` returns `null`
+  ///   rather than wrongly splitting `+7` (Russia) off the front.
+  /// * Set [stripTrunkPrefix] (default `true`) to drop a single national trunk
+  ///   `0` that some regions prefix (`+44 020…` written as `+440…`). This only
+  ///   applies to the national remainder, never the dial code.
+  /// * Pass [within] to limit matching to a subset of countries — for example a
+  ///   field that only offers a handful of countries.
+  ///
+  /// For a variant that always returns a usable value (falling back to a given
+  /// country instead of `null`), see [parsePhone].
+  static ({Country country, String nationalNumber})? parse(
+    String raw, {
+    bool stripTrunkPrefix = true,
+    Iterable<Country>? within,
+  }) {
     final trimmed = raw.trim();
-    final hasPlus = trimmed.startsWith('+');
-    final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    var digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.isEmpty) return null;
-    final lookup = hasPlus ? '+$digits' : '+$digits';
-    final country = fromDialCode(lookup);
+    var hasPlus = trimmed.startsWith('+');
+    // `00` is the international call prefix — treat it like a leading `+`.
+    if (!hasPlus && digits.startsWith('00')) {
+      hasPlus = true;
+      digits = digits.substring(2);
+    }
+    final country = _matchDialCode(digits, hasPlus: hasPlus, within: within);
     if (country == null) return null;
-    final national = digits.substring(country.dialCodeDigits.length);
+    final national = _trimTrunk(
+      digits.substring(country.dialCodeDigits.length),
+      stripTrunkPrefix,
+    );
     return (country: country, nationalNumber: national);
   }
+
+  /// Like [parse], but never returns `null`: when no dial code can be matched
+  /// the digits are kept and attributed to [fallback], so a field can always be
+  /// pre-filled. A blank input yields `(fallback, '')`.
+  ///
+  /// This is the right tool for hydrating an input from possibly-messy stored
+  /// data. It mirrors how a person reads a number:
+  ///
+  /// ```dart
+  /// Countries.parsePhone('+263771234567');  // (Zimbabwe, '771234567')
+  /// Countries.parsePhone('0771234567', fallback: Countries.zimbabwe);
+  ///   // (Zimbabwe, '771234567')  — national trunk 0 dropped
+  /// Countries.parsePhone('771234567', fallback: Countries.zimbabwe);
+  ///   // (Zimbabwe, '771234567')  — bare local number, attributed to fallback
+  /// Countries.parsePhone('', fallback: Countries.kenya);  // (Kenya, '')
+  /// ```
+  ///
+  /// A leading national `0` is only treated as a trunk prefix when the input
+  /// has no `+`; with an explicit dial code the remainder is taken verbatim
+  /// (unless [stripTrunkPrefix] strips a trunk 0 from the national part).
+  static ({Country country, String nationalNumber}) parsePhone(
+    String? raw, {
+    Country fallback = unitedStates,
+    bool stripTrunkPrefix = true,
+    Iterable<Country>? within,
+  }) {
+    final trimmed = (raw ?? '').trim();
+    var digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return (country: fallback, nationalNumber: '');
+    var hasPlus = trimmed.startsWith('+');
+    // `00` is the international call prefix — treat it like a leading `+`.
+    if (!hasPlus && digits.startsWith('00')) {
+      hasPlus = true;
+      digits = digits.substring(2);
+    }
+
+    // A leading national 0 with no country code (e.g. `0771234567`) is a local
+    // number on the fallback country.
+    if (!hasPlus && stripTrunkPrefix && digits.startsWith('0')) {
+      return (country: fallback, nationalNumber: digits.substring(1));
+    }
+
+    final country = _matchDialCode(digits, hasPlus: hasPlus, within: within);
+    if (country != null) {
+      final national = _trimTrunk(
+        digits.substring(country.dialCodeDigits.length),
+        stripTrunkPrefix,
+      );
+      return (country: country, nationalNumber: national);
+    }
+
+    // No recognisable dial code — treat the digits as a local number.
+    return (country: fallback, nationalNumber: digits);
+  }
+
+  /// Peels a country dial code off the front of [digits] (digits only, no `+`).
+  ///
+  /// With [hasPlus] any matching dial code is accepted and the longest one
+  /// wins. Without it, the remaining digits must be a valid national length for
+  /// the candidate, so a bare local number is not mistaken for "code + number".
+  static Country? _matchDialCode(
+    String digits, {
+    required bool hasPlus,
+    Iterable<Country>? within,
+  }) {
+    final pool = within ?? _all;
+    Country? best;
+    for (final c in pool) {
+      final code = c.dialCodeDigits;
+      if (!digits.startsWith(code)) continue;
+      final restLength = digits.length - code.length;
+      if (!hasPlus &&
+          !(restLength >= c.minLength && restLength <= c.maxLength)) {
+        continue;
+      }
+      if (best == null || c.dialCode.length > best.dialCode.length) {
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /// Drops a single leading national trunk `0` when [enabled].
+  static String _trimTrunk(String national, bool enabled) =>
+      (enabled && national.startsWith('0')) ? national.substring(1) : national;
 
   // --- Named accessors for the most commonly used defaults. ---
   static const Country zimbabwe = Country(

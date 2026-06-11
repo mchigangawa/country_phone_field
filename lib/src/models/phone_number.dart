@@ -20,21 +20,68 @@ class PhoneNumber {
 
   /// Builds a [PhoneNumber] from a raw international string such as
   /// `'+263 77 123 4567'`, matching the dial code against the bundled (or
-  /// supplied) countries. Returns `null` if no country can be matched.
+  /// supplied) countries. Returns `null` if no country can be confidently
+  /// matched. See [Countries.parse] for the dial-code matching rules (longest
+  /// prefix with a `+`; valid national length required without one).
   ///
   /// Pass [resolve] to use a custom country resolver (e.g. when you restrict
-  /// the field to a subset of countries).
+  /// the field to a subset of countries), or [within] to limit the bundled
+  /// match to a subset. Set [stripTrunkPrefix] to drop a leading national `0`.
   static PhoneNumber? tryParse(
     String raw, {
     Country? Function(String dialCodeInput)? resolve,
+    Iterable<Country>? within,
+    bool stripTrunkPrefix = true,
   }) {
-    final trimmed = raw.trim();
-    final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.isEmpty) return null;
-    final country = (resolve ?? _defaultResolve)('+$digits');
-    if (country == null) return null;
-    final national = digits.substring(country.dialCodeDigits.length);
-    return PhoneNumber(country: country, nationalNumber: national);
+    if (resolve != null) {
+      final digits = raw.trim().replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.isEmpty) return null;
+      final country = resolve('+$digits');
+      if (country == null) return null;
+      final national = digits.substring(country.dialCodeDigits.length);
+      return PhoneNumber(
+        country: country,
+        nationalNumber: stripTrunkPrefix && national.startsWith('0')
+            ? national.substring(1)
+            : national,
+      );
+    }
+    final parsed = Countries.parse(
+      raw,
+      stripTrunkPrefix: stripTrunkPrefix,
+      within: within,
+    );
+    if (parsed == null) return null;
+    return PhoneNumber(
+      country: parsed.country,
+      nationalNumber: parsed.nationalNumber,
+    );
+  }
+
+  /// Builds a [PhoneNumber] from possibly-messy stored data, always returning a
+  /// value: when no dial code matches, the digits are attributed to [fallback]
+  /// (with a leading national `0` dropped). Delegates to [Countries.parsePhone].
+  ///
+  /// ```dart
+  /// PhoneNumber.parse('0771234567', fallback: Countries.zimbabwe);
+  ///   // nationalNumber '771234567', country Zimbabwe
+  /// ```
+  static PhoneNumber parse(
+    String? raw, {
+    Country fallback = Countries.unitedStates,
+    Iterable<Country>? within,
+    bool stripTrunkPrefix = true,
+  }) {
+    final parsed = Countries.parsePhone(
+      raw,
+      fallback: fallback,
+      within: within,
+      stripTrunkPrefix: stripTrunkPrefix,
+    );
+    return PhoneNumber(
+      country: parsed.country,
+      nationalNumber: parsed.nationalNumber,
+    );
   }
 
   /// The selected country (carries the dial code, flag and length rules).
@@ -71,9 +118,6 @@ class PhoneNumber {
       nationalNumber: nationalNumber ?? this.nationalNumber,
     );
   }
-
-  static Country? _defaultResolve(String input) =>
-      Countries.fromDialCode(input);
 
   @override
   bool operator ==(Object other) =>

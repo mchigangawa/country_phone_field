@@ -11,16 +11,28 @@ separated from the rest of the number**.
 - 🎨 Style it any way you like — outlined, underlined, filled, **borderless**, or a fully custom `InputDecoration`
 - 🔎 Searchable country picker (bottom sheet **or** dialog), favorites, custom rows, or your own picker entirely
 - ✅ Built-in required + per-country length validation, or bring your own `validator`
+- 📋 **Smart paste** — paste `+263771234567` and it picks the country and strips the dial code
+- 🧩 **Robust parsing** — handles a `+`, a bare `00` international prefix, a national trunk `0`, and messy stored data
 - 📦 Emits E.164 (`+263771234567`) **and** the parts (`country` + `nationalNumber`) separately
 - 🔒 Lockable to a single country (e.g. mobile-money flows)
 - 🌗 Theme-aware (light/dark) out of the box, fully overridable
 - 🌐 Every user-facing string is overridable for localization
 
+## Screenshots
+
+| Field styles | Country picker | Dialog picker |
+| --- | --- | --- |
+| ![Gallery of field styles](screenshots/01_overview_framed.png) | ![Searchable country picker](screenshots/02_country_picker_framed.png) | ![Dialog picker](screenshots/03_dialog_picker_framed.png) |
+
+| Auto-detect & hydration | Dark theme |
+| --- | --- |
+| ![Auto-detect on paste](screenshots/04_auto_detect_framed.png) | ![Dark theme](screenshots/05_overview_dark_framed.png) |
+
 ## Install
 
 ```yaml
 dependencies:
-  country_phone_field: ^0.1.0
+  country_phone_field: ^0.2.0-beta.1
 ```
 
 ```dart
@@ -60,6 +72,66 @@ Hydrate a field from a stored E.164 string:
 final parsed = PhoneNumber.tryParse('+263771234567');
 // parsed.country == Countries.zimbabwe, parsed.nationalNumber == '771234567'
 ```
+
+…or just hand the number straight to the field as `initialValue` (see
+[Smart input](#smart-input-paste-auto-detect--edge-cases) below).
+
+## Smart input: paste, auto-detect & edge cases
+
+Real numbers arrive in many shapes. The field and the parsers handle them so you
+don't have to sanitise input yourself.
+
+### In the field
+
+| You type / paste | The field does |
+| --- | --- |
+| `+263771234567` | Switches the country to 🇿🇼 Zimbabwe, shows `771234567` |
+| `00263771234567` | Same — `00` is treated as the international `+` prefix |
+| `0771234567` | Drops the national trunk `0`, shows `771234567` |
+| `77-123 4567` | Strips separators to digits |
+| `771234567` (no `+`) | Left as-is — a bare local number is **not** guessed as a foreign country |
+
+```dart
+PhoneNumberField(
+  initialValue: '+263771234567', // hydrate from a stored E.164 number
+  autoDetectCountry: true,        // paste +<code> → switch country (default)
+  stripNationalPrefix: true,      // drop a leading national 0 (default)
+);
+```
+
+Auto-detect only ever picks from the field's own `countries` list, so a
+restricted field never jumps to a country you didn't offer. Turn either
+behaviour off with `autoDetectCountry: false` / `stripNationalPrefix: false`.
+
+> Auto-detect fires on a **paste** or an explicit `+`/`00`. Typing a bare
+> national number never silently switches countries.
+
+### Parsing API
+
+Two helpers cover the spectrum from strict to forgiving:
+
+```dart
+// Strict — returns null if a country can't be confidently determined.
+Countries.parse('+12421234567');   // (Bahamas, '1234567')  — longest code wins
+Countries.parse('263771234567');   // (Zimbabwe, '771234567') — valid remainder
+Countries.parse('771234567');      // null — won't mis-split +7 (Russia)
+Countries.parse('+2630771234567'); // (Zimbabwe, '771234567') — trunk 0 dropped
+
+// Forgiving — never null; unmatched digits fall back to the given country.
+Countries.parsePhone('0771234567', fallback: Countries.zimbabwe);
+  // (Zimbabwe, '771234567')
+Countries.parsePhone('771234567', fallback: Countries.zimbabwe);
+  // (Zimbabwe, '771234567') — bare local number kept on the fallback
+Countries.parsePhone('', fallback: Countries.kenya);  // (Kenya, '')
+
+// Same, but typed as PhoneNumber:
+PhoneNumber.parse('0771234567', fallback: Countries.zimbabwe).completeNumber;
+  // '+263771234567'
+```
+
+Restrict any of `parse` / `parsePhone` / `tryParse` / `fromDialCode` to a subset
+with `within:` (e.g. the same list you pass to the field), and keep a leading
+trunk `0` with `stripTrunkPrefix: false`.
 
 ## Validation & verification
 
@@ -196,13 +268,71 @@ PhoneNumberField(
 PhoneNumberField(countries: [Countries.kenya, Countries.zimbabwe, Countries.southAfrica]);
 
 // Look things up:
-Countries.fromIsoCode('ZW');        // Country?
-Countries.fromDialCode('+263...');  // longest-prefix match
-Countries.parse('+263771234567');   // (country, nationalNumber)
+Countries.fromIsoCode('ZW');         // Country?
+Countries.fromDialCode('+263...');   // longest-prefix match
+Countries.parse('+263771234567');    // (country, nationalNumber)?  — strict
+Countries.parsePhone('0771234567',   // (country, nationalNumber)   — never null
+    fallback: Countries.zimbabwe);
 
 // Customize an entry or add your own:
 final c = Countries.zimbabwe.copyWith(name: 'Zim');
 const custom = Country(name: 'Narnia', isoCode: 'NA', dialCode: '+999', minLength: 6, maxLength: 8);
+```
+
+## Recipes
+
+**Pre-fill from a saved profile (E.164).** Hand the stored number straight in;
+the country is detected and only national digits are shown.
+
+```dart
+PhoneNumberField(
+  initialValue: user.phoneE164,           // e.g. '+447911123456'
+  onSaved: (phone) => user.phoneE164 = phone.completeNumber,
+);
+```
+
+**Edit screen with a controller.** Seed the controller with national digits and
+the country with `initialCountry`, or split a stored number first:
+
+```dart
+final parsed = PhoneNumber.parse(user.phoneE164, fallback: Countries.zimbabwe);
+PhoneNumberField(
+  controller: TextEditingController(text: parsed.nationalNumber),
+  initialCountry: parsed.country,
+);
+```
+
+**Sign-up where phone is optional** (an email may be given instead):
+
+```dart
+PhoneNumberField(required: false, onChanged: (p) => _phone = p);
+```
+
+**Mobile-money / single-country** flow — lock the country, keep the field
+read-only if the number is carried in from verification:
+
+```dart
+PhoneNumberField(
+  lockedCountry: Countries.zimbabwe,
+  readOnly: comesFromVerifiedSignup,
+  labels: const PhoneFieldLabels(labelText: 'EcoCash number'),
+);
+```
+
+**Regional app** — offer only a few countries; auto-detect and lookups stay
+within that set:
+
+```dart
+const regional = [Countries.kenya, Countries.zimbabwe, Countries.southAfrica];
+PhoneNumberField(countries: regional, initialCountry: Countries.kenya);
+```
+
+**Validate & submit with a `Form`:**
+
+```dart
+if (formKey.currentState!.validate()) {
+  formKey.currentState!.save();   // fires onSaved with the final PhoneNumber
+}
 ```
 
 ## Localization
@@ -231,8 +361,8 @@ CountryPickerType.dialog`) on larger ones.
 
 ## Example
 
-A full gallery (six styles, live output, theme toggle, form validation) lives in
-[`example/`](example/lib/main.dart):
+A full gallery (seven configurations incl. auto-detect/hydration, live output,
+theme toggle, form validation) lives in [`example/`](example/lib/main.dart):
 
 ```bash
 cd example && flutter run
@@ -243,6 +373,11 @@ cd example && flutter run
 `PhoneNumberField`, `PhoneNumber`, `Country`, `Countries`,
 `CountrySelectorStyle`, `CountryPickerConfig`, `CountryPickerType`,
 `PhoneFieldLabels`, `PhoneFieldBorderType`, `showCountryPicker`.
+
+## Releasing
+
+Maintainers: see [RELEASING.md](RELEASING.md) for how to ship stable and beta
+versions through the automated GitHub Actions → pub.dev pipeline.
 
 ## License
 

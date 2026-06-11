@@ -1,9 +1,21 @@
 name: country_phone_field
 description: "A highly customizable international phone number input field: searchable country picker, per-country validation, flexible styling, and E.164 output."
-version: 0.1.1
+version: 0.2.0-beta.1
 homepage: https://github.com/mchigangawa/country_phone_field
 repository: https://github.com/mchigangawa/country_phone_field
 issue_tracker: https://github.com/mchigangawa/country_phone_field/issues
+
+screenshots:
+  - description: "Gallery of field styles with live output."
+    path: screenshots/01_overview_framed.png
+  - description: "Searchable country picker bottom sheet with pinned favorites."
+    path: screenshots/02_country_picker_framed.png
+  - description: "Country picker as a centered dialog."
+    path: screenshots/03_dialog_picker_framed.png
+  - description: "Auto-detect on paste and hydration from a stored E.164 number."
+    path: screenshots/04_auto_detect_framed.png
+  - description: "Dark theme out of the box."
+    path: screenshots/05_overview_dark_framed.png
 
 environment:
   sdk: ^3.12.1
