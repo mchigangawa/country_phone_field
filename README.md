@@ -374,6 +374,11 @@ cd example && flutter run
 `CountrySelectorStyle`, `CountryPickerConfig`, `CountryPickerType`,
 `PhoneFieldLabels`, `PhoneFieldBorderType`, `showCountryPicker`.
 
+## Releasing
+
+Maintainers: see [RELEASING.md](RELEASING.md) for how to ship stable and beta
+versions through the automated GitHub Actions → pub.dev pipeline.
+
 ## License
 
 See [LICENSE](LICENSE).
