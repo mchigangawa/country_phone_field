@@ -202,6 +202,37 @@ class _GalleryPageState extends State<GalleryPage> {
               ),
             ),
 
+            // 7. Auto-detect on paste + hydration from a stored E.164 number.
+            _Section(
+              title: '7 · Auto-detect & E.164 hydration',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const PhoneNumberField(
+                    // Pre-filled from a stored international number: the country
+                    // is detected and only the national digits are shown.
+                    initialValue: '+254712345678',
+                    labels: PhoneFieldLabels(labelText: 'Restored number'),
+                  ),
+                  const SizedBox(height: 12),
+                  PhoneNumberField(
+                    initialCountry: Countries.zimbabwe,
+                    labels: const PhoneFieldLabels(
+                      labelText: 'Paste a +number or 0…',
+                      hintText: 'e.g. +27 82 123 4567',
+                    ),
+                    onChanged: (value) => setState(() => _live = value),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Paste “+27821234567” → switches to South Africa and '
+                    'strips the code. Type “0771234567” → drops the leading 0.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 8),
             FilledButton(
               onPressed: () {

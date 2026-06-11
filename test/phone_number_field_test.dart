@@ -248,6 +248,97 @@ void main() {
     });
   });
 
+  group('Auto-detect & hydration', () {
+    testWidgets('pasting +dialcode switches country and strips the code', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      Country? changed;
+      await tester.pumpWidget(
+        _host(
+          PhoneNumberField(
+            controller: controller,
+            initialCountry: Countries.unitedStates,
+            onCountryChanged: (c) => changed = c,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), '+254712345678');
+      await tester.pumpAndSettle();
+
+      expect(controller.text, '712345678'); // dial code stripped
+      expect(changed, Countries.kenya);
+      expect(find.text('+254'), findsOneWidget);
+    });
+
+    testWidgets('pasting 00 international prefix is detected', (tester) async {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        _host(
+          PhoneNumberField(
+            controller: controller,
+            initialCountry: Countries.unitedStates,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), '00263771234567');
+      await tester.pumpAndSettle();
+
+      expect(controller.text, '771234567');
+      expect(find.text('+263'), findsOneWidget);
+    });
+
+    testWidgets('strips a leading national 0', (tester) async {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        _host(
+          PhoneNumberField(
+            controller: controller,
+            initialCountry: Countries.zimbabwe,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), '0771234567');
+      await tester.pump();
+      expect(controller.text, '771234567');
+    });
+
+    testWidgets('autoDetectCountry: false leaves a + paste as digits', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        _host(
+          PhoneNumberField(
+            controller: controller,
+            initialCountry: Countries.unitedStates, // maxLength 10
+            autoDetectCountry: false,
+            stripNationalPrefix: false,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), '+254712345678');
+      await tester.pump();
+      // No detection: digits only, capped at US maxLength (10), country stays.
+      expect(controller.text, '2547123456');
+      expect(find.text('+1'), findsOneWidget);
+    });
+
+    testWidgets('hydrates the field from a full E.164 initialValue', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(const PhoneNumberField(initialValue: '+263771234567')),
+      );
+      expect(find.text('+263'), findsOneWidget); // country detected
+      expect(find.text('771234567'), findsOneWidget); // national digits only
+    });
+  });
+
   group('Form integration', () {
     testWidgets('onSaved receives the final value', (tester) async {
       final formKey = GlobalKey<FormState>();

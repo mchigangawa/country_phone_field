@@ -1,0 +1,8 @@
+# The unframed captures are kept in git as the frameit source, but only the
+# framed PNGs are referenced by the README / pub.dev gallery, so keep the
+# published archive lean by shipping only the framed versions.
+01_overview.png
+02_country_picker.png
+03_dialog_picker.png
+04_auto_detect.png
+05_overview_dark.png
