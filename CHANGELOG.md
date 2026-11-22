@@ -1,3 +1,7 @@
+## 0.3.0
+
+- Promote 0.3.0-beta.1 to stable with the same runtime implementation. This release includes adaptive Material and Cupertino fields, international number parsing, and the controller and picker fixes described below.
+
 ## 0.3.0-beta.1
 
 - Support Flutter 3.50.1 and Dart 3.14.0. The minimum Flutter version is 3.47.0.

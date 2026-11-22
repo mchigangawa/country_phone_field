@@ -40,7 +40,7 @@ Use the official `cupertino_ui` or `material_ui` package for the app and its the
 
 ```yaml
 dependencies:
-  country_phone_field: ^0.3.0-beta.1
+  country_phone_field: ^0.3.0
   material_ui: ^1.11.1
 ```
 
