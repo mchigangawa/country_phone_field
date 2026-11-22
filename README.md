@@ -1,7 +1,5 @@
 # country_phone_field
 
-Tested with Flutter 3.50.1 and Dart 3.14.0. Requires Flutter 3.47.0 or later.
-
 A **highly customizable** international phone number input field for Flutter.
 
 Pick a country from a searchable picker, type a number that is automatically
