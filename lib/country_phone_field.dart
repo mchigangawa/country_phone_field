@@ -27,3 +27,5 @@ export 'src/models/phone_number.dart' show PhoneNumber;
 export 'src/widgets/country_picker.dart' show showCountryPicker;
 export 'src/widgets/phone_number_field.dart'
     show PhoneNumberField, PhoneFieldBorderType;
+
+export 'src/models/phone_field_design.dart';

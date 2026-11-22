@@ -1,4 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' as cu;
+
+import 'dart:async';
+
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:country_phone_field/country_phone_field.dart';
 
@@ -30,6 +34,79 @@ void main() {
       );
       expect(find.text('Mobile'), findsOneWidget);
     });
+  });
+
+  testWidgets('ignores a country picked after disposal', (tester) async {
+    final pending = Completer<Country?>();
+    await tester.pumpWidget(
+      _host(
+        PhoneNumberField(
+          initialCountry: Countries.zimbabwe,
+          pickerBuilder: (_, _, _) => pending.future,
+        ),
+      ),
+    );
+    await tester.tap(find.text('+263'));
+    await tester.pumpWidget(const SizedBox());
+    pending.complete(Countries.kenya);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps text when the external controller is detached', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '1234');
+    await tester.pumpWidget(_host(PhoneNumberField(controller: controller)));
+    await tester.pumpWidget(_host(const PhoneNumberField()));
+    controller.dispose();
+    expect(find.text('1234'), findsOneWidget);
+  });
+
+  testWidgets('CupertinoApp searches countries and saves the national number', (
+    tester,
+  ) async {
+    final key = GlobalKey<FormState>();
+    PhoneNumber? saved;
+    await tester.pumpWidget(
+      cu.CupertinoApp(
+        home: cu.CupertinoPageScaffold(
+          child: Form(
+            key: key,
+            child: PhoneNumberField(
+              initialCountry: Countries.zimbabwe,
+              onSaved: (value) => saved = value,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('+263'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(cu.CupertinoSearchTextField), 'Kenya');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(cu.CupertinoListTile, 'Kenya'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(cu.CupertinoTextField), '712345678');
+    expect(key.currentState!.validate(), isTrue);
+    key.currentState!.save();
+    expect(saved!.completeNumber, '+254712345678');
+  });
+
+  testWidgets('design can override either app', (tester) async {
+    await tester.pumpWidget(
+      _host(const PhoneNumberField(design: PhoneFieldDesign.cupertino)),
+    );
+    expect(find.byType(cu.CupertinoTextFormFieldRow), findsOneWidget);
+    await tester.pumpWidget(
+      const cu.CupertinoApp(
+        localizationsDelegates: [DefaultMaterialLocalizations.delegate],
+        home: cu.CupertinoPageScaffold(
+          child: PhoneNumberField(design: PhoneFieldDesign.material),
+        ),
+      ),
+    );
+    expect(find.byType(TextFormField), findsOneWidget);
   });
 
   group('Input handling', () {

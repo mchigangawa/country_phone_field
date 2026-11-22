@@ -1,4 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' as cu;
+
+import '../models/phone_field_design.dart';
+
+import 'package:material_ui/material_ui.dart';
 
 import '../models/country.dart';
 import '../models/country_picker_config.dart';
@@ -15,7 +19,59 @@ Future<Country?> showCountryPicker({
   required CountryPickerConfig config,
   required PhoneFieldLabels labels,
   Country? selected,
+  PhoneFieldDesign design = PhoneFieldDesign.adaptive,
 }) {
+  if (design.usesCupertino(context)) {
+    final dialog = config.type == CountryPickerType.dialog;
+    Widget picker(BuildContext context) {
+      final body = ClipRRect(
+        borderRadius: config.borderRadius,
+        child: ColoredBox(
+          color:
+              config.backgroundColor ??
+              cu.CupertinoColors.systemBackground.resolveFrom(context),
+          child: SizedBox(
+            height:
+                MediaQuery.sizeOf(context).height *
+                (dialog ? config.maxChildSize : config.initialChildSize),
+            width: dialog ? 420 : double.infinity,
+            child: _CountryPickerBody(
+              countries: countries,
+              config: config,
+              labels: labels,
+              selected: selected,
+              scrollController: null,
+              cupertino: true,
+            ),
+          ),
+        ),
+      );
+      return dialog
+          ? Center(
+              child: Padding(padding: const EdgeInsets.all(20), child: body),
+            )
+          : Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: body,
+            );
+    }
+
+    if (dialog) {
+      return cu.showCupertinoDialog<Country>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: config.barrierColor,
+        builder: picker,
+      );
+    }
+    return cu.showCupertinoModalPopup<Country>(
+      context: context,
+      barrierColor: config.barrierColor ?? cu.kCupertinoModalBarrierColor,
+      builder: picker,
+    );
+  }
   switch (config.type) {
     case CountryPickerType.dialog:
       return showDialog<Country>(
@@ -73,12 +129,14 @@ class _CountryPickerBody extends StatefulWidget {
     required this.labels,
     required this.selected,
     required this.scrollController,
+    this.cupertino = false,
   });
 
   final List<Country> countries;
   final CountryPickerConfig config;
   final PhoneFieldLabels labels;
   final Country? selected;
+  final bool cupertino;
   final ScrollController? scrollController;
 
   @override
@@ -161,33 +219,39 @@ class _CountryPickerBodyState extends State<_CountryPickerBody> {
           if (config.searchable)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                controller: _searchController,
-                autofocus: false,
-                onChanged: _onSearch,
-                textInputAction: TextInputAction.search,
-                decoration:
-                    config.searchDecoration ??
-                    InputDecoration(
-                      hintText: widget.labels.searchHint,
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                _onSearch('');
-                              },
+              child: widget.cupertino
+                  ? cu.CupertinoSearchTextField(
+                      controller: _searchController,
+                      placeholder: widget.labels.searchHint,
+                      onChanged: _onSearch,
+                    )
+                  : TextField(
+                      controller: _searchController,
+                      autofocus: false,
+                      onChanged: _onSearch,
+                      textInputAction: TextInputAction.search,
+                      decoration:
+                          config.searchDecoration ??
+                          InputDecoration(
+                            hintText: widget.labels.searchHint,
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchController.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _onSearch('');
+                                    },
+                                  ),
+                            filled: true,
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
                             ),
-                      filled: true,
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+                          ),
                     ),
-              ),
             ),
           const SizedBox(height: 8),
           Expanded(
@@ -214,6 +278,21 @@ class _CountryPickerBodyState extends State<_CountryPickerBody> {
                           country,
                           isSelected,
                           select,
+                        );
+                      }
+                      if (widget.cupertino) {
+                        return cu.CupertinoListTile(
+                          title: Text(country.name),
+                          leading: config.showFlagInList
+                              ? Text(
+                                  country.flag,
+                                  style: TextStyle(fontSize: config.flagSize),
+                                )
+                              : null,
+                          trailing: config.showDialCodeInList
+                              ? Text(country.dialCode)
+                              : null,
+                          onTap: select,
                         );
                       }
                       return ListTile(

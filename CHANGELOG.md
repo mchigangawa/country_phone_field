@@ -1,3 +1,10 @@
+## 0.3.0-beta.1
+
+- Support Flutter 3.50.1 and Dart 3.14.0. The minimum Flutter version is 3.47.0.
+- Add adaptive Cupertino and Material fields and pickers, with explicit design overrides.
+- Migrate Material widgets and public styling types to `package:material_ui/material_ui.dart`. Use this import for the surrounding MaterialApp, theme, and field decorations.
+- Preserve the editing value when detaching a controller and ignore picker results after the field is removed or disabled.
+
 ## 0.2.0-beta.1
 
 Smarter parsing and input handling for real-world numbers, plus documentation

@@ -1,6 +1,6 @@
 name: country_phone_field
 description: "A highly customizable international phone number input field: searchable country picker, per-country validation, flexible styling, and E.164 output."
-version: 0.2.0-beta.1
+version: 0.3.0-beta.1
 homepage: https://github.com/mchigangawa/country_phone_field
 repository: https://github.com/mchigangawa/country_phone_field
 issue_tracker: https://github.com/mchigangawa/country_phone_field/issues
@@ -18,10 +18,12 @@ screenshots:
     path: screenshots/05_overview_dark_framed.png
 
 environment:
-  sdk: ^3.12.1
-  flutter: ">=1.17.0"
+  sdk: ^3.13.0
+  flutter: ">=3.47.0"
 
 dependencies:
+  cupertino_ui: ^1.1.7
+  material_ui: ^1.11.1
   flutter:
     sdk: flutter
 

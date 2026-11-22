@@ -1,4 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' as cu;
+
+import '../models/phone_field_design.dart';
+
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../data/countries.dart';
@@ -52,6 +56,7 @@ class PhoneNumberField extends StatefulWidget {
   /// Creates a phone number field.
   const PhoneNumberField({
     super.key,
+    this.design = PhoneFieldDesign.adaptive,
     this.controller,
     this.initialValue,
     this.initialCountry,
@@ -251,6 +256,9 @@ class PhoneNumberField extends StatefulWidget {
   /// Keyboard type. Defaults to [TextInputType.phone].
   final TextInputType keyboardType;
 
+  /// Selects adaptive, Material, or Cupertino controls.
+  final PhoneFieldDesign design;
+
   @override
   State<PhoneNumberField> createState() => _PhoneNumberFieldState();
 }
@@ -326,9 +334,11 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
 
     // Swap controllers if the caller changed them.
     if (widget.controller != oldWidget.controller) {
-      oldWidget.controller?.removeListener(_handleTextChanged);
+      final previousValue = _controller.value;
+      _controller.removeListener(_handleTextChanged);
       if (_ownsController) _controller.dispose();
-      _controller = widget.controller ?? TextEditingController();
+      _controller =
+          widget.controller ?? TextEditingController.fromValue(previousValue);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleTextChanged);
     }
@@ -396,11 +406,17 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
         context: context,
         countries: _countries,
         config: widget.pickerConfig,
+        design: widget.design,
         labels: widget.labels,
         selected: _country,
       );
     }
-    if (picked != null) _setCountry(picked);
+    if (mounted &&
+        _pickerEnabled &&
+        picked != null &&
+        _countries.contains(picked)) {
+      _setCountry(picked);
+    }
   }
 
   // --- Validation -----------------------------------------------------------
@@ -465,7 +481,9 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
         children.add(
           style.dropdownIcon ??
               Icon(
-                Icons.arrow_drop_down,
+                widget.design.usesCupertino(context)
+                    ? cu.CupertinoIcons.chevron_down
+                    : Icons.arrow_drop_down,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
         );
@@ -484,6 +502,13 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       content = Row(mainAxisSize: MainAxisSize.min, children: children);
     }
 
+    if (widget.design.usesCupertino(context)) {
+      return cu.CupertinoButton(
+        padding: style.padding,
+        onPressed: _pickerEnabled ? _openPicker : null,
+        child: content,
+      );
+    }
     return InkWell(
       onTap: _pickerEnabled ? _openPicker : null,
       borderRadius: BorderRadius.horizontal(
@@ -562,7 +587,29 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       ...?widget.inputFormatters,
     ];
 
-    return TextFormField(
+    if (widget.design.usesCupertino(context)) {
+      return cu.CupertinoTextFormFieldRow(
+        controller: _controller,
+        focusNode: widget.focusNode,
+        prefix: _buildSelector(context),
+        placeholder: widget.labels.hintText ?? widget.labels.labelText,
+        padding: widget.contentPadding ?? EdgeInsets.zero,
+        enabled: widget.enabled,
+        readOnly: widget.readOnly,
+        autofocus: widget.autofocus,
+        keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        textAlign: widget.textAlign,
+        style: widget.textStyle,
+        cursorColor: widget.cursorColor,
+        inputFormatters: formatters,
+        validator: _validate,
+        autovalidateMode: widget.autovalidateMode ?? AutovalidateMode.disabled,
+        onFieldSubmitted: (_) => widget.onSubmitted?.call(_value),
+        onSaved: (_) => widget.onSaved?.call(_value),
+      );
+    }
+    final materialField = TextFormField(
       controller: _controller,
       focusNode: widget.focusNode,
       enabled: widget.enabled,
@@ -580,6 +627,9 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       onSaved: (_) => widget.onSaved?.call(_value),
       decoration: _buildDecoration(context, _buildSelector(context)),
     );
+    return Material.maybeOf(context) == null
+        ? Material(type: MaterialType.transparency, child: materialField)
+        : materialField;
   }
 }
 

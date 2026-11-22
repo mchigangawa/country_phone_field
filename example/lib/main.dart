@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:country_phone_field/country_phone_field.dart';
 
 void main() => runApp(const ExampleApp());
@@ -124,9 +124,9 @@ class _GalleryPageState extends State<GalleryPage> {
                 initialCountry: Countries.kenya,
                 borderType: PhoneFieldBorderType.none,
                 borderRadius: 28,
-                fillColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest,
+                fillColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
                 labels: const PhoneFieldLabels(labelText: 'Mobile'),
               ),
             ),
@@ -181,9 +181,8 @@ class _GalleryPageState extends State<GalleryPage> {
                     minHeight: 0,
                   ),
                   filled: true,
-                  fillColor: Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  fillColor: Theme.of(context).colorScheme.primaryContainer
+                      .withValues(alpha: 0.3),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(

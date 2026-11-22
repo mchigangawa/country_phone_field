@@ -1,5 +1,7 @@
 # country_phone_field
 
+Tested with Flutter 3.50.1 and Dart 3.14.0. Requires Flutter 3.47.0 or later.
+
 A **highly customizable** international phone number input field for Flutter.
 
 Pick a country from a searchable picker, type a number that is automatically
@@ -18,6 +20,12 @@ separated from the rest of the number**.
 - 🌗 Theme-aware (light/dark) out of the box, fully overridable
 - 🌐 Every user-facing string is overridable for localization
 
+## Material and Cupertino
+
+The default `design: PhoneFieldDesign.adaptive` follows the surrounding app. A `CupertinoApp` uses Cupertino input and picker controls. A `MaterialApp` uses Material controls. Set `design` to `PhoneFieldDesign.cupertino` or `PhoneFieldDesign.material` to override the app style.
+
+Use the official `cupertino_ui` or `material_ui` package for the app and its theme. When forcing Material inside a CupertinoApp, include the Material localization delegate in the app's `localizationsDelegates`. Input values, controllers, and validators work with both designs. Material-specific InputDecoration settings apply to the Material design.
+
 ## Screenshots
 
 | Field styles | Country picker | Dialog picker |
@@ -32,7 +40,8 @@ separated from the rest of the number**.
 
 ```yaml
 dependencies:
-  country_phone_field: ^0.2.0-beta.1
+  country_phone_field: ^0.3.0-beta.1
+  material_ui: ^1.11.1
 ```
 
 ```dart
